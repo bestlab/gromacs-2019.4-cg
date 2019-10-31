@@ -583,25 +583,98 @@ void
             /*         #elif KERNEL_VDW=='Buckingham' */
 
             /* BUCKINGHAM DISPERSION/REPULSION */
+            /* REPLACED BY KARANICOLAS-BROOKS/KIM-HUMMER INTERACTION */
+/* BEGIN >> NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW */
             rinvsix          = rinvsq{I}{J}*rinvsq{I}{J}*rinvsq{I}{J};
-            vvdw6            = c6_{I}{J}*rinvsix;
-            br               = cexp2_{I}{J}*r{I}{J};
-            vvdwexp          = cexp1_{I}{J}*exp(-br);
-            /*             ## Estimate exp() to 25 flops */
-            /*             #define INNERFLOPS INNERFLOPS+31 */
-            /*             #if 'Potential' in KERNEL_VF or KERNEL_MOD_VDW=='PotentialSwitch'  */
-            /*                 #if KERNEL_MOD_VDW=='PotentialShift' */
-            vvdw             = (vvdwexp-cexp1_{I}{J}*exp(-cexp2_{I}{J}*rvdw)) - (vvdw6 - c6_{I}{J}*sh_vdw_invrcut6)*(1.0/6.0);
-            /*                     #define INNERFLOPS INNERFLOPS+33 */
-            /*                  #else */
-            vvdw             = vvdwexp - vvdw6*(1.0/6.0);
-            /*                     #define INNERFLOPS INNERFLOPS+2 */
-            /*                 #endif */
-            /*             #endif */
-            /*             #if 'Force' in KERNEL_VF */
-            fvdw             = (br*vvdwexp-vvdw6)*rinvsq{I}{J};
-            /*                 #define INNERFLOPS INNERFLOPS+3 */
-            /*             #endif */
+            /* r^6 term the same */
+	    if (cexp1_{I}{J} > 0.0) {
+		if (cexp2_{I}{J} > 0.0) {
+	        	/* KARANICOLAS-BROOKS */
+                	vvdw6            = c6_{I}{J}*rinvsix/6.;
+            		/* r^10 term */
+            		/* br               = cexp2_{I}{J}*r{I}{J};*/
+            		br               = cexp2_{I}{J}*rinvsq{I}{J}*rinvsq{I}{J}*rinvsix;
+            		/* r^12 term */
+            		/* vvdwexp          = cexp1_{I}{J}*exp(-br); */
+            		vvdwexp          = cexp1_{I}{J}*rinvsix*rinvsix;
+            		/*             ## Estimate exp() to 25 flops */
+            		/*             #define INNERFLOPS INNERFLOPS+31 */
+            		/*             #if 'Potential' in KERNEL_VF or KERNEL_MOD_VDW=='PotentialSwitch'  */
+            		/*                 #if KERNEL_MOD_VDW=='PotentialShift' */
+            		vvdw             = vvdwexp - br + vvdw6;
+            		/* vvdw             = (vvdwexp-cexp1_{I}{J}*exp(-cexp2_{I}{J}*rvdw)) - (vvdw6 - c6_{I}{J}*sh_vdw_invrcut6)*(1.0/6.0); */
+            		/* vvdw             = (vvdwexp-cexp1_{I}{J}*exp(-cexp2_{I}{J}*rvdw)) - (vvdw6 - c6_{I}{J}*sh_vdw_invrcut6)*(1.0/6.0); */
+            		/*                     #define INNERFLOPS INNERFLOPS+33 */
+            		/*                  #else */
+            		/* vvdw             = vvdwexp - vvdw6*(1.0/6.0);*/
+            		vvdw             = vvdwexp - br + vvdw6;
+            		/*                     #define INNERFLOPS INNERFLOPS+2 */
+            		/*                 #endif */
+            		/*             #endif */
+            		/*             #if 'Force' in KERNEL_VF */
+            		/* fvdw             = (br*vvdwexp-vvdw6)*rinvsq{I}{J};*/
+            		fvdw             = (12.0*vvdwexp - 10.0*br + 6.0*vvdw6)*rinvsq{I}{J};
+            		/*                 #define INNERFLOPS INNERFLOPS+3 */
+            		/*             #endif */
+		} else {
+			/* HPS */
+			/* cexp1 = sigma**6 (has to be positive) */
+			/* cexp2 = -eps */
+			/* c6 = lambda */
+
+			if ( rinvsix > 0.5/cexp1_{I}{J}  ) {
+				/* attractive part of potential */
+				/* r<r_min; regular LJ + offset */
+				vvdw6 = -4.*cexp2_{I}{J}*cexp1_{I}{J}*rinvsix;
+				vvdw12 = -4.*cexp2_{I}{J}*cexp1_{I}{J}*cexp1_{I}{J}*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6 - (1-c6_{I}{J}/6.0)*cexp2_{I}{J};
+            		/*             #if 'Force' in KERNEL_VF */
+				fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq{I}{J};
+            		/*             #endif */
+			} else {
+				/* repulsive part of potential  */
+				/* r>=r_min; lambda * regular LJ  */
+				vvdw6 = -4.*c6_{I}{J}/6.0*cexp2_{I}{J}*cexp1_{I}{J}*rinvsix;
+				vvdw12 = -4.*c6_{I}{J}/6.0*cexp2_{I}{J}*cexp1_{I}{J}*cexp1_{I}{J}*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6;
+            		/*             #if 'Force' in KERNEL_VF */
+				fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq{I}{J};
+            		/*             #endif */
+			}
+		}
+	    } else {
+	    	/* KIM-HUMMER */
+		if ( cexp2_{I}{J} < 0.0 ) {
+			/* attractive interaction */
+			vvdw6 = -c6_{I}{J}*rinvsix/6.0;
+			vvdw12 = -cexp2_{I}{J}*rinvsix*rinvsix;
+			vvdw = vvdw12-vvdw6;
+            	/*             #if 'Force' in KERNEL_VF */
+			fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq{I}{J};
+            	/*             #endif */
+		} else {
+			/* repulsive interaction */
+	    		if ( rinvsix > -0.5*cexp1_{I}{J} ) {
+				/* r < r_min */
+				vvdw6 = c6_{I}{J}*rinvsix/6.0;
+				vvdw12 = cexp2_{I}{J}*rinvsix*rinvsix;
+				vvdwexp = -c6_{I}{J}*cexp1_{I}{J}/24.;
+				vvdw = vvdw12-vvdw6+2.*vvdwexp;
+            	/*             #if 'Force' in KERNEL_VF */
+				fvdw = (12.*vvdw12 - 6.*vvdw6)*rinvsq{I}{J};
+            	/*             #endif */
+			} else {
+				/* r >= r_min */
+				vvdw6 = -c6_{I}{J}*rinvsix/6.0;
+				vvdw12 = -cexp2_{I}{J}*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6;
+            	/*             #if 'Force' in KERNEL_VF */
+				fvdw = (12.*vvdw12 - 6.*vvdw6)*rinvsq{I}{J};
+            	/*             #endif */
+			}
+		}
+	    }
+/* END >> NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW */
 
             /*         #elif KERNEL_VDW=='CubicSplineTable' */
 
