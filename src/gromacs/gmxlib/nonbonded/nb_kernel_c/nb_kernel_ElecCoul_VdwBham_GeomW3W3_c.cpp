@@ -270,12 +270,73 @@ nb_kernel_ElecCoul_VdwBham_GeomW3W3_VF_c
             felec            = velec*rinvsq00;
 
             /* BUCKINGHAM DISPERSION/REPULSION */
+            /* REPLACED BY KARANICOLAS-BROOKS/KIM-HUMMER INTERACTION */
+/* BEGIN >> NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW */
             rinvsix          = rinvsq00*rinvsq00*rinvsq00;
-            vvdw6            = c6_00*rinvsix;
-            br               = cexp2_00*r00;
-            vvdwexp          = cexp1_00*exp(-br);
-            vvdw             = vvdwexp - vvdw6*(1.0/6.0);
-            fvdw             = (br*vvdwexp-vvdw6)*rinvsq00;
+            /* r^6 term the same */
+	    if (cexp1_00 > 0.0) {
+		if (cexp2_00 > 0.0) {
+	        	/* KARANICOLAS-BROOKS */
+                	vvdw6            = c6_00*rinvsix/6.;
+            		/* r^10 term */
+            		/* br               = cexp2_00*r00;*/
+            		br               = cexp2_00*rinvsq00*rinvsq00*rinvsix;
+            		/* r^12 term */
+            		/* vvdwexp          = cexp1_00*exp(-br); */
+            		vvdwexp          = cexp1_00*rinvsix*rinvsix;
+            		/* vvdw             = vvdwexp - vvdw6*(1.0/6.0);*/
+            		vvdw             = vvdwexp - br + vvdw6;
+            		/* fvdw             = (br*vvdwexp-vvdw6)*rinvsq00;*/
+            		fvdw             = (12.0*vvdwexp - 10.0*br + 6.0*vvdw6)*rinvsq00;
+		} else {
+			/* HPS */
+			/* cexp1 = sigma**6 (has to be positive) */
+			/* cexp2 = -eps */
+			/* c6 = lambda */
+
+			if ( rinvsix > 0.5/cexp1_00  ) {
+				/* attractive part of potential */
+				/* r<r_min; regular LJ + offset */
+				vvdw6 = -4.*cexp2_00*cexp1_00*rinvsix;
+				vvdw12 = -4.*cexp2_00*cexp1_00*cexp1_00*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6 - (1-c6_00/6.0)*cexp2_00;
+				fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq00;
+			} else {
+				/* repulsive part of potential  */
+				/* r>=r_min; lambda * regular LJ  */
+				vvdw6 = -4.*c6_00/6.0*cexp2_00*cexp1_00*rinvsix;
+				vvdw12 = -4.*c6_00/6.0*cexp2_00*cexp1_00*cexp1_00*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6;
+				fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq00;
+			}
+		}
+	    } else {
+	    	/* KIM-HUMMER */
+		if ( cexp2_00 < 0.0 ) {
+			/* attractive interaction */
+			vvdw6 = -c6_00*rinvsix/6.0;
+			vvdw12 = -cexp2_00*rinvsix*rinvsix;
+			vvdw = vvdw12-vvdw6;
+			fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq00;
+		} else {
+			/* repulsive interaction */
+	    		if ( rinvsix > -0.5*cexp1_00 ) {
+				/* r < r_min */
+				vvdw6 = c6_00*rinvsix/6.0;
+				vvdw12 = cexp2_00*rinvsix*rinvsix;
+				vvdwexp = -c6_00*cexp1_00/24.;
+				vvdw = vvdw12-vvdw6+2.*vvdwexp;
+				fvdw = (12.*vvdw12 - 6.*vvdw6)*rinvsq00;
+			} else {
+				/* r >= r_min */
+				vvdw6 = -c6_00*rinvsix/6.0;
+				vvdw12 = -cexp2_00*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6;
+				fvdw = (12.*vvdw12 - 6.*vvdw6)*rinvsq00;
+			}
+		}
+	    }
+/* END >> NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW */
 
             /* Update potential sums from outer loop */
             velecsum        += velec;
@@ -771,11 +832,71 @@ nb_kernel_ElecCoul_VdwBham_GeomW3W3_F_c
             felec            = velec*rinvsq00;
 
             /* BUCKINGHAM DISPERSION/REPULSION */
+            /* REPLACED BY KARANICOLAS-BROOKS/KIM-HUMMER INTERACTION */
+/* BEGIN >> NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW */
             rinvsix          = rinvsq00*rinvsq00*rinvsq00;
-            vvdw6            = c6_00*rinvsix;
-            br               = cexp2_00*r00;
-            vvdwexp          = cexp1_00*exp(-br);
-            fvdw             = (br*vvdwexp-vvdw6)*rinvsq00;
+            /* r^6 term the same */
+	    if (cexp1_00 > 0.0) {
+		if (cexp2_00 > 0.0) {
+	        	/* KARANICOLAS-BROOKS */
+                	vvdw6            = c6_00*rinvsix/6.;
+            		/* r^10 term */
+            		/* br               = cexp2_00*r00;*/
+            		br               = cexp2_00*rinvsq00*rinvsq00*rinvsix;
+            		/* r^12 term */
+            		/* vvdwexp          = cexp1_00*exp(-br); */
+            		vvdwexp          = cexp1_00*rinvsix*rinvsix;
+            		/* fvdw             = (br*vvdwexp-vvdw6)*rinvsq00;*/
+            		fvdw             = (12.0*vvdwexp - 10.0*br + 6.0*vvdw6)*rinvsq00;
+		} else {
+			/* HPS */
+			/* cexp1 = sigma**6 (has to be positive) */
+			/* cexp2 = -eps */
+			/* c6 = lambda */
+
+			if ( rinvsix > 0.5/cexp1_00  ) {
+				/* attractive part of potential */
+				/* r<r_min; regular LJ + offset */
+				vvdw6 = -4.*cexp2_00*cexp1_00*rinvsix;
+				vvdw12 = -4.*cexp2_00*cexp1_00*cexp1_00*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6 - (1-c6_00/6.0)*cexp2_00;
+				fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq00;
+			} else {
+				/* repulsive part of potential  */
+				/* r>=r_min; lambda * regular LJ  */
+				vvdw6 = -4.*c6_00/6.0*cexp2_00*cexp1_00*rinvsix;
+				vvdw12 = -4.*c6_00/6.0*cexp2_00*cexp1_00*cexp1_00*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6;
+				fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq00;
+			}
+		}
+	    } else {
+	    	/* KIM-HUMMER */
+		if ( cexp2_00 < 0.0 ) {
+			/* attractive interaction */
+			vvdw6 = -c6_00*rinvsix/6.0;
+			vvdw12 = -cexp2_00*rinvsix*rinvsix;
+			vvdw = vvdw12-vvdw6;
+			fvdw = (12.0 * vvdw12 - 6.0 * vvdw6)*rinvsq00;
+		} else {
+			/* repulsive interaction */
+	    		if ( rinvsix > -0.5*cexp1_00 ) {
+				/* r < r_min */
+				vvdw6 = c6_00*rinvsix/6.0;
+				vvdw12 = cexp2_00*rinvsix*rinvsix;
+				vvdwexp = -c6_00*cexp1_00/24.;
+				vvdw = vvdw12-vvdw6+2.*vvdwexp;
+				fvdw = (12.*vvdw12 - 6.*vvdw6)*rinvsq00;
+			} else {
+				/* r >= r_min */
+				vvdw6 = -c6_00*rinvsix/6.0;
+				vvdw12 = -cexp2_00*rinvsix*rinvsix;
+				vvdw = vvdw12-vvdw6;
+				fvdw = (12.*vvdw12 - 6.*vvdw6)*rinvsq00;
+			}
+		}
+	    }
+/* END >> NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW */
 
             fscal            = felec+fvdw;
 
